@@ -1,12 +1,19 @@
-from django import template
+from django import template, get_version
 from django.db import models
 from django.core.cache import cache
 from django.contrib.sites.models import Site
+from distutils.version import LooseVersion
 
 register = template.Library()
 
-Chunk = models.get_model('chunks', 'Chunk')
+if LooseVersion(get_version()) < LooseVersion("1.7"):
+    Chunk = models.get_model('chunks', 'Chunk')
+else:
+    from django.apps import apps
+    Chunk = apps.get_model('chunks', 'Chunk')
+
 CACHE_PREFIX = "chunk_"
+
 
 def do_get_chunk(parser, token):
     # split_contents() knows not to split quoted strings.
@@ -23,12 +30,13 @@ def do_get_chunk(parser, token):
         raise template.TemplateSyntaxError, "%r tag's argument should be in quotes" % tag_name
     # Send key (without quotes) and caching time
     return ChunkNode(key[1:-1], cache_time)
-    
+
+
 class ChunkNode(template.Node):
     def __init__(self, key, cache_time=0):
-       self.key = key
-       self.cache_time = int(cache_time)
-       self.lang_code = template.Variable('LANGUAGE_CODE')
+        self.key = key
+        self.cache_time = int(cache_time)
+        self.lang_code = template.Variable('LANGUAGE_CODE')
     
     def render(self, context):
         try:
@@ -50,5 +58,6 @@ class ChunkNode(template.Node):
                 # don't even call cache if timeout is 0
                 cache.set(cache_key, content, self.cache_time)
         return content
+
 
 register.tag('chunk', do_get_chunk)
